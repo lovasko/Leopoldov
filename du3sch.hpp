@@ -14,24 +14,25 @@ class wrapper
 	public:
 		bool ready;
 		TASK task;
-		std::promise<T> *prom;
+		T result;
 
 		wrapper (TASK _task)
 		{
 			ready = false;
 			task = std::move(_task);
-			prom = new std::promise<T>();
 		}
 
-		~wrapper() {}
+		~wrapper() 
+		{
+		}
 };
 
 template<typename T, typename TASK>
 class Scheduler
 {
 	private:
-		std::mutex m;
-		std::condition_variable cv;
+		std::mutex m, m2;
+		std::condition_variable cv, cv2;
 		size_t task_count;
 		std::atomic<unsigned int> train;
 		std::vector<wrapper<T, TASK>> tasks;
@@ -63,8 +64,9 @@ class Scheduler
 				train++;
 				lck.unlock();
 				
-				tasks[local_train_copy].prom->set_value(tasks[local_train_copy].task());		
+				tasks[local_train_copy].result = tasks[local_train_copy].task();
 				tasks[local_train_copy].ready = true;
+				cv2.notify_one();
 
 				std::this_thread::yield();
 			}
@@ -90,7 +92,16 @@ class Scheduler
 
 		T get_task_result(std::size_t index)
 		{
-			return tasks[index].prom->get_future().get();	
+			if (is_task_ready(index))
+				return tasks[index].result;
+			else
+			{
+				std::unique_lock<std::mutex> lock(m2);	
+				while (!is_task_ready(index))
+					cv2.wait(lock);
+
+				return tasks[index].result;
+			}
 		}
 };
 
