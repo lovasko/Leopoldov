@@ -1,3 +1,6 @@
+// DU3sch.hpp
+// Daniel Lovasko NPRG051 2013/2014
+
 #pragma once
 
 #include <string>
