@@ -9,20 +9,20 @@
 #include <condition_variable>
 
 template <typename T, typename TASK>
-class wrapper
+class Wrapper
 {
 	public:
 		bool ready;
 		TASK task;
 		T result;
 
-		wrapper (TASK _task)
+		Wrapper (TASK _task)
 		{
 			ready = false;
 			task = std::move(_task);
 		}
 
-		~wrapper() 
+		~Wrapper() 
 		{
 		}
 };
@@ -35,21 +35,39 @@ class Scheduler
 		std::condition_variable cv, cv2;
 		size_t task_count;
 		std::atomic<unsigned int> train;
-		std::vector<wrapper<T, TASK>> tasks;
+		std::vector<Wrapper<T, TASK>> tasks;
+		size_t _core_count;
+		std::thread **threads;
+		bool should_finish;
 
 	public:
 		Scheduler(std::size_t core_count)
 		{
 			task_count = 0;
 			train = 0;
+			_core_count = core_count;
 
-			std::thread **threads = new std::thread*[core_count];
-			for (size_t i = 0; i < core_count; i++)
+			threads = new std::thread*[core_count];
+			for (size_t i = 0; i < _core_count; i++)
+			{
 				threads[i] = new std::thread(&Scheduler::worker, this);
+			}
 		}
 
 		~Scheduler()
 		{
+			// This variable is checked in the ::worker after condvar unlock
+			should_finish = true;
+
+			// Add fake task so the condvar would unblock and notify all threads
+			task_count += 1;
+			cv.notify_all();
+
+			// Join all threads
+			for (size_t i = 0; i < _core_count; i++)
+			{
+				threads[i]->join();
+			}
 		}
 
 		void worker ()
@@ -59,6 +77,9 @@ class Scheduler
 				std::unique_lock<std::mutex> lck(m);
 				while (train >= task_count)
 					cv.wait(lck);	
+
+				if (should_finish)
+					break;
 
 				unsigned int local_train_copy = train;
 				train++;
@@ -76,7 +97,7 @@ class Scheduler
 		{
 			std::unique_lock<std::mutex> lck(m);
 
-			wrapper<T, TASK> w(task);
+			Wrapper<T, TASK> w(task);
 			tasks.push_back(w);
 
 			task_count++;
