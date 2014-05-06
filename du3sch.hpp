@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 
 template<typename T, typename TASK>
 class Scheduler
