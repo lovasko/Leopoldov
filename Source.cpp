@@ -8,7 +8,7 @@
 #include "Stopwatch.h"
 #include "du3sch.hpp"
 
-static std::size_t Count = 1000;
+static std::size_t Count = 2500;
 
 static std::size_t MaxNum = 10000000;
 
