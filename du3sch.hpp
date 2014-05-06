@@ -5,6 +5,21 @@
 #include <mutex>
 #include <condition_variable>
 
+template <typename T, typename TASK>
+class wrapper
+{
+	public:
+		bool ready;
+		TASK task;
+		std::promise<T> prom;
+
+		wrapper (TASK&& _task)
+		{
+			ready = false;
+			task = std::move(_task);
+		}
+};
+
 template<typename T, typename TASK>
 class Scheduler
 {
@@ -21,6 +36,9 @@ class Scheduler
 			task_count = 0;
 			train = 0;
 
+			std::thread **threads = new std::thread*[core_count];
+			for (size_t i = 0; i < core_count; i++)
+				threads[i] = new std::thread(&Scheduler::worker, this);
 		}
 
 		~Scheduler()
@@ -29,20 +47,23 @@ class Scheduler
 
 		void worker ()
 		{
-			if (train < task_count)
-			{
-				// make the task with std::async but deferred.	
-			}
-			else
-			{
-				// wait on condition variable		
-			}
+			std::unique_lock<std::mutex>(m);
+			while (! (train < task_count) 
+				cv.wait(lck);	
+			unsigned int local_train_copy = train;
+			train++;
+			
+			tasks[local_train_copy].prom.set_value(tasks[local_train_copy].task());		
+			tasks[local_Train_copy].ready = true;
 		}
 
 		std::size_t add_task(TASK&& task)
 		{
-			std::lock_guard<std::mutex>(m);
-			tasks.push_back(task);
+			std::unique_lock<std::mutex>(m);
+
+			wrapper w(task);
+			tasks.push_back(w);
+
 			task_count++;
 			cv.notify_one();
 
@@ -56,7 +77,7 @@ class Scheduler
 
 		T get_task_result(std::size_t index)
 		{
-			return tasks[index].fut.get();	
+			return tasks[index].prom.get_future().get();	
 		}
 };
 
